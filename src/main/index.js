@@ -75,7 +75,8 @@ async function launchProfile(profileId) {
   }
 
   if (profile.sound) {
-    exec(`start "" powershell -NoProfile -Command "Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open([uri]'${profile.sound}'); $p.Volume = 0.9; $p.Play(); Start-Sleep -Seconds 300; $p.Close()"`);
+    // -WindowStyle Hidden prevents the PowerShell console window from appearing
+    exec(`powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open([uri]'${profile.sound}'); $p.Volume = 0.9; $p.Play(); Start-Sleep -Seconds 300; $p.Close()"`);
     appendLog(profileId, 'ok', `Playing ${path.basename(profile.sound)}`);
   }
 
@@ -84,10 +85,10 @@ async function launchProfile(profileId) {
   for (const appItem of profile.apps || []) {
     if (appItem.path) {
       try {
-        // Use exec + shell so Windows handles quoting correctly (fixes VS Code folder paths)
+        // `start /max` opens the window maximized; title arg ("") is required by start
         const args = appItem.args ? appItem.args.trim() : '';
-        const cmd = args ? `"${appItem.path}" ${args}` : `"${appItem.path}"`;
-        exec(cmd, { detached: true });
+        const cmd = `start /max "" "${appItem.path}"${args ? ' ' + args : ''}`;
+        exec(cmd);
         appendLog(profileId, 'ok', `Launched ${path.basename(appItem.path)}`);
       } catch (e) {
         appendLog(profileId, 'error', `Failed: ${appItem.path} — ${e.message}`);
@@ -102,14 +103,14 @@ async function launchProfile(profileId) {
   for (const group of profile.urlGroups || []) {
     if (!group.urls?.length) continue;
     const urlArgs = group.urls.map(u => `"${u}"`).join(' ');
-    exec(`"${chromePath}" --profile-directory="${group.chromeProfile || 'Default'}" --new-window ${urlArgs}`);
+    exec(`"${chromePath}" --profile-directory="${group.chromeProfile || 'Default'}" --new-window --start-maximized ${urlArgs}`);
     appendLog(profileId, 'ok', `Opened ${group.urls.length} tab(s) → Chrome ${group.chromeProfile || 'Default'}`);
     await new Promise(r => setTimeout(r, 400));
   }
 
   // Legacy single URLs
   for (const urlItem of profile.urls || []) {
-    exec(`"${chromePath}" --profile-directory="${urlItem.chromeProfile || 'Default'}" --new-window "${urlItem.url}"`);
+    exec(`"${chromePath}" --profile-directory="${urlItem.chromeProfile || 'Default'}" --new-window --start-maximized "${urlItem.url}"`);
     appendLog(profileId, 'ok', `Opened ${urlItem.url}`);
     await new Promise(r => setTimeout(r, 300));
   }
