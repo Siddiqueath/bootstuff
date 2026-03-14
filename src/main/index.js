@@ -1,10 +1,26 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, globalShortcut } = require('electron');
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
 
 const store = new Store();
+
+// Parse a shell-style args string respecting quoted tokens
+// e.g. '"D:\Lasso\UI" --new-window' → ['D:\Lasso\UI', '--new-window']
+function parseArgs(str) {
+  if (!str || !str.trim()) return [];
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (const ch of str) {
+    if (ch === '"' || ch === "'") { inQuotes = !inQuotes; }
+    else if (ch === ' ' && !inQuotes) { if (current) { result.push(current); current = ''; } }
+    else { current += ch; }
+  }
+  if (current) result.push(current);
+  return result;
+}
 let tray = null;
 let settingsWindow = null;
 
@@ -68,7 +84,7 @@ async function launchProfile(profileId) {
   for (const appItem of profile.apps || []) {
     if (appItem.path) {
       try {
-        spawn(appItem.path, appItem.args ? appItem.args.split(' ').filter(Boolean) : [], { detached: true, stdio: 'ignore' }).unref();
+        spawn(appItem.path, appItem.args ? parseArgs(appItem.args) : [], { detached: true, stdio: 'ignore' }).unref();
         appendLog(profileId, 'ok', `Launched ${path.basename(appItem.path)}`);
       } catch (e) {
         appendLog(profileId, 'error', `Failed: ${appItem.path} — ${e.message}`);
@@ -182,6 +198,28 @@ function scanTasksJson(folderPath) {
   } catch { return null; }
 }
 
+
+// ── Global shortcuts ──────────────────────────────────────────────────────────
+function registerProfileShortcuts() {
+  globalShortcut.unregisterAll();
+  const profiles = store.get('profiles') || [];
+  for (const profile of profiles) {
+    if (!profile.shortcut) continue;
+    try {
+      const registered = globalShortcut.register(profile.shortcut, () => {
+        launchProfile(profile.id);
+        // If window is open, switch to log view
+        settingsWindow?.webContents.send('shortcut-launched', profile.id);
+      });
+      if (!registered) {
+        console.warn(`Shortcut ${profile.shortcut} for "${profile.name}" could not be registered (already in use)`);
+      }
+    } catch (e) {
+      console.warn(`Invalid shortcut "${profile.shortcut}" for profile "${profile.name}":`, e.message);
+    }
+  }
+}
+
 // ── Schema migration — ensure all profiles have urlGroups field ───────────────
 function migrateProfiles() {
   const profiles = store.get('profiles') || [];
@@ -211,6 +249,7 @@ function buildTrayMenu() {
 app.whenReady().then(() => {
   app.setAppUserModelId('com.bootstuff.app');
   migrateProfiles();
+  registerProfileShortcuts();
 
   // Load tray icon — prefer 16px, fall back to main icon, then empty
   let icon = nativeImage.createEmpty();
@@ -228,6 +267,7 @@ app.whenReady().then(() => {
   ipcMain.handle('save-profiles', (_, profiles) => {
     store.set('profiles', profiles);
     tray.setContextMenu(buildTrayMenu());
+    registerProfileShortcuts();
     return true;
   });
   ipcMain.handle('launch-profile', async (_, profileId) => {
@@ -251,6 +291,29 @@ app.whenReady().then(() => {
   ipcMain.handle('get-settings', () => store.get('settings') || {});
   ipcMain.handle('save-settings', (_, settings) => { store.set('settings', settings); return true; });
   ipcMain.handle('get-launch-log', () => launchLog);
+
+  ipcMain.handle('check-shortcut', (_, accelerator) => {
+    if (!accelerator) return { valid: false, taken: false };
+    try {
+      // Check if we already own this shortcut (profile already has it)
+      const alreadyOurs = globalShortcut.isRegistered(accelerator);
+      if (alreadyOurs) return { valid: true, taken: false };
+
+      // Try to register it temporarily to test validity + system availability
+      const reg = globalShortcut.register(accelerator, () => {});
+      if (reg) {
+        globalShortcut.unregister(accelerator);
+        registerProfileShortcuts(); // restore existing shortcuts
+        return { valid: true, taken: false };
+      } else {
+        // register() returned false = taken by another app
+        return { valid: true, taken: true };
+      }
+    } catch (e) {
+      // Throws if accelerator format is invalid
+      return { valid: false, taken: false, error: e.message };
+    }
+  });
 
   // u2500u2500 Windows startup (HKCU Run registry via Electron API) u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
   ipcMain.handle('get-startup-enabled', () => {
@@ -318,3 +381,4 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', (e) => e.preventDefault());
+app.on('will-quit', () => globalShortcut.unregisterAll());

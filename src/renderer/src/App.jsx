@@ -24,6 +24,10 @@ export default function App() {
     window.bootstuff?.onLaunchLogEntry?.((entry) => {
       setLogEntries(prev => [...prev, entry]);
     });
+    // When a global shortcut fires, switch to log view so user can see progress
+    window.bootstuff?.onShortcutLaunched?.((profileId) => {
+      setView('log');
+    });
   }, []);
 
   const profilesRef = useRef(profiles);

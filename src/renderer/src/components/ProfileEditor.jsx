@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ShortcutRecorder from './ShortcutRecorder';
 
 const Section = ({ title, children }) => (
   <div style={{ marginBottom: 28 }}>
@@ -122,6 +123,13 @@ export default function ProfileEditor({ profile, onChange }) {
             <input value={profile.name} onChange={e => update('name', e.target.value)} placeholder="Profile name" />
           </div>
         </Row>
+        <div style={{ marginTop: 8 }}>
+          <Label>Global Shortcut <span style={{ color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— launch this profile from anywhere</span></Label>
+          <ShortcutRecorder
+            value={profile.shortcut || ''}
+            onChange={v => update('shortcut', v)}
+          />
+        </div>
       </Section>
 
       {/* Sound & Volume */}
