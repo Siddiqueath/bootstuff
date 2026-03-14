@@ -36,9 +36,19 @@ export default function SettingsPanel() {
     window.bootstuff?.getSettings().then(s => {
       if (s) setSettings(prev => ({ ...prev, ...s }));
     });
-    window.bootstuff?.getStartupEnabled().then(res => {
-      setStartup({ enabled: res.enabled, isDev: res.isDev, loading: false });
-    });
+    // Guard: if IPC call fails or method doesn't exist, still clear loading
+    const startupCall = window.bootstuff?.getStartupEnabled?.();
+    if (!startupCall) {
+      setStartup({ enabled: false, isDev: true, loading: false });
+      return;
+    }
+    startupCall
+      .then(res => {
+        setStartup({ enabled: res?.enabled ?? false, isDev: res?.isDev ?? false, loading: false });
+      })
+      .catch(() => {
+        setStartup({ enabled: false, isDev: true, loading: false });
+      });
   }, []);
 
   const save = async () => {

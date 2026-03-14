@@ -254,21 +254,31 @@ app.whenReady().then(() => {
 
   // u2500u2500 Windows startup (HKCU Run registry via Electron API) u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
   ipcMain.handle('get-startup-enabled', () => {
-    const { openAtLogin } = app.getLoginItemSettings();
-    return { enabled: openAtLogin, isDev: process.env.NODE_ENV === 'development' };
+    const isDev = process.env.NODE_ENV === 'development';
+    try {
+      const { openAtLogin } = app.getLoginItemSettings();
+      return { enabled: openAtLogin, isDev };
+    } catch (e) {
+      return { enabled: false, isDev };
+    }
   });
 
   ipcMain.handle('set-startup-enabled', (_, enable) => {
-    if (process.env.NODE_ENV === 'development') {
-      return { ok: false, isDev: true };
+    const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) return { ok: false, isDev: true };
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: enable,
+        openAsHidden: true,
+        name: 'BootStuff',
+        path: app.getPath('exe')
+      });
+      // Verify it actually took effect
+      const { openAtLogin } = app.getLoginItemSettings();
+      return { ok: true, enabled: openAtLogin };
+    } catch (e) {
+      return { ok: false, error: e.message };
     }
-    app.setLoginItemSettings({
-      openAtLogin: enable,
-      openAsHidden: true,
-      name: 'BootStuff',
-      path: app.getPath('exe')
-    });
-    return { ok: true, enabled: enable };
   });
 
   ipcMain.handle('import-bat-file', async () => {
