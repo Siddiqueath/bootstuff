@@ -4,9 +4,10 @@
   "description": "Launch your entire work environment in one click",
   "main": "src/main/index.js",
   "scripts": {
-    "start": "concurrently \"npm run dev:renderer\" \"wait-on http://localhost:5173 && npm run dev:electron\"",
+    "start": "concurrently \"npm run dev:renderer\" \"npm run dev:electron:wait\"",
     "dev:renderer": "cd src/renderer && npm run dev",
-    "dev:electron": "NODE_ENV=development electron .",
+    "dev:electron:wait": "wait-on http://localhost:5173 && npm run dev:electron",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
     "build:renderer": "cd src/renderer && npm run build",
     "build": "npm run build:renderer && electron-builder",
     "pack": "npm run build:renderer && electron-builder --dir"
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "concurrently": "^8.0.0",
+    "cross-env": "^7.0.3",
     "electron": "^28.0.0",
     "electron-builder": "^24.0.0",
     "wait-on": "^7.0.0"
