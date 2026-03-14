@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('bootstuff', {
   importBatFile: () => ipcRenderer.invoke('import-bat-file'),
   scanTasksJson: (folderPath) => ipcRenderer.invoke('scan-tasks-json', folderPath),
   onLaunchLogEntry: (cb) => ipcRenderer.on('launch-log-entry', (_, entry) => cb(entry)),
+  // Windows startup
+  getStartupEnabled: () => ipcRenderer.invoke('get-startup-enabled'),
+  setStartupEnabled: (enable) => ipcRenderer.invoke('set-startup-enabled', enable),
+  // Window controls
   closeWindow: () => ipcRenderer.send('close-window'),
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
   maximizeWindow: () => ipcRenderer.send('maximize-window'),

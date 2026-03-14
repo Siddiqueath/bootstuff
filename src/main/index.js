@@ -27,15 +27,18 @@ function appendLog(profileId, type, message) {
 // ── Settings window ───────────────────────────────────────────────────────────
 function createSettingsWindow() {
   if (settingsWindow) { settingsWindow.focus(); return; }
+  const startMinimized = store.get('settings.startMinimized') || false;
   settingsWindow = new BrowserWindow({
     width: 960, height: 680, minWidth: 820, minHeight: 600,
     frame: false, resizable: true,
+    show: !startMinimized,
     webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
     title: 'BootStuff'
   });
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev) { settingsWindow.loadURL('http://localhost:5173'); }
   else { settingsWindow.loadFile(path.join(__dirname, '../../renderer/dist/index.html')); }
+  if (startMinimized) settingsWindow.once('ready-to-show', () => settingsWindow && settingsWindow.hide());
   settingsWindow.on('closed', () => { settingsWindow = null; });
 }
 
@@ -248,6 +251,25 @@ app.whenReady().then(() => {
   ipcMain.handle('get-settings', () => store.get('settings') || {});
   ipcMain.handle('save-settings', (_, settings) => { store.set('settings', settings); return true; });
   ipcMain.handle('get-launch-log', () => launchLog);
+
+  // u2500u2500 Windows startup (HKCU Run registry via Electron API) u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
+  ipcMain.handle('get-startup-enabled', () => {
+    const { openAtLogin } = app.getLoginItemSettings();
+    return { enabled: openAtLogin, isDev: process.env.NODE_ENV === 'development' };
+  });
+
+  ipcMain.handle('set-startup-enabled', (_, enable) => {
+    if (process.env.NODE_ENV === 'development') {
+      return { ok: false, isDev: true };
+    }
+    app.setLoginItemSettings({
+      openAtLogin: enable,
+      openAsHidden: true,
+      name: 'BootStuff',
+      path: app.getPath('exe')
+    });
+    return { ok: true, enabled: enable };
+  });
 
   ipcMain.handle('import-bat-file', async () => {
     const result = await dialog.showOpenDialog(settingsWindow, {

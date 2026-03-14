@@ -1,5 +1,23 @@
 import { useState, useEffect } from 'react';
 
+const Toggle = ({ value, onChange, disabled }) => (
+  <div
+    onClick={() => !disabled && onChange(!value)}
+    style={{
+      width: 36, height: 20, borderRadius: 99, transition: 'background 0.2s',
+      background: disabled ? 'var(--border)' : value ? 'var(--accent)' : 'var(--surface2)',
+      border: '1px solid var(--border)', position: 'relative',
+      cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0, opacity: disabled ? 0.5 : 1
+    }}
+  >
+    <div style={{
+      width: 14, height: 14, borderRadius: 99, background: '#fff',
+      position: 'absolute', top: 2, transition: 'left 0.2s',
+      left: value ? 18 : 2
+    }} />
+  </div>
+);
+
 const Field = ({ label, hint, children }) => (
   <div style={{ marginBottom: 20 }}>
     <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>{label}</p>
@@ -11,10 +29,15 @@ const Field = ({ label, hint, children }) => (
 export default function SettingsPanel() {
   const [settings, setSettings] = useState({ chromePath: '', nircmdPath: '', startMinimized: false });
   const [saved, setSaved] = useState(false);
+  const [startup, setStartup] = useState({ enabled: false, isDev: false, loading: true });
+  const [startupStatus, setStartupStatus] = useState(null); // 'ok' | 'dev-warn' | null
 
   useEffect(() => {
     window.bootstuff?.getSettings().then(s => {
       if (s) setSettings(prev => ({ ...prev, ...s }));
+    });
+    window.bootstuff?.getStartupEnabled().then(res => {
+      setStartup({ enabled: res.enabled, isDev: res.isDev, loading: false });
     });
   }, []);
 
@@ -22,6 +45,20 @@ export default function SettingsPanel() {
     await window.bootstuff?.saveSettings(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const toggleStartup = async (enable) => {
+    setStartup(s => ({ ...s, loading: true }));
+    const res = await window.bootstuff?.setStartupEnabled(enable);
+    if (res?.isDev) {
+      setStartup(s => ({ ...s, loading: false }));
+      setStartupStatus('dev-warn');
+      setTimeout(() => setStartupStatus(null), 4000);
+    } else {
+      setStartup({ enabled: res?.enabled ?? enable, isDev: false, loading: false });
+      setStartupStatus('ok');
+      setTimeout(() => setStartupStatus(null), 2000);
+    }
   };
 
   const Section = ({ title, children }) => (
@@ -45,6 +82,7 @@ export default function SettingsPanel() {
         }}>{saved ? '✓ Saved' : 'Save Settings'}</button>
       </div>
 
+      {/* Paths */}
       <Section title="Paths">
         <Field label="Chrome Executable" hint="Full path to chrome.exe (used for opening URLs)">
           <input
@@ -64,38 +102,87 @@ export default function SettingsPanel() {
         </Field>
       </Section>
 
-      <Section title="Behavior">
-        <Field label="Start Minimized to Tray">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <div
-              onClick={() => setSettings(s => ({ ...s, startMinimized: !s.startMinimized }))}
-              style={{
-                width: 36, height: 20, borderRadius: 99, transition: 'background 0.2s',
-                background: settings.startMinimized ? 'var(--accent)' : 'var(--surface2)',
-                border: '1px solid var(--border)', position: 'relative', cursor: 'pointer', flexShrink: 0
-              }}
-            >
-              <div style={{
-                width: 14, height: 14, borderRadius: 99, background: '#fff',
-                position: 'absolute', top: 2, transition: 'left 0.2s',
-                left: settings.startMinimized ? 18 : 2
-              }} />
-            </div>
+      {/* Startup & Behavior */}
+      <Section title="Startup & Behavior">
+
+        {/* Windows startup toggle */}
+        <Field
+          label="Launch at Windows startup"
+          hint="Adds BootStuff to HKCU\Software\Microsoft\Windows\CurrentVersion\Run so it starts automatically when you log in."
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Toggle
+              value={startup.enabled}
+              onChange={toggleStartup}
+              disabled={startup.loading}
+            />
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {settings.startMinimized ? 'Enabled — app starts in tray' : 'Disabled — settings window opens on launch'}
+              {startup.loading
+                ? 'Checking…'
+                : startup.enabled
+                ? '✓ Enabled — BootStuff starts with Windows'
+                : 'Disabled'}
             </span>
-          </label>
+            {startupStatus === 'ok' && (
+              <span style={{ fontSize: 11, color: 'var(--success)', marginLeft: 'auto' }}>
+                {startup.enabled ? '✓ Added to startup' : '✓ Removed from startup'}
+              </span>
+            )}
+            {startupStatus === 'dev-warn' && (
+              <span style={{ fontSize: 11, color: '#f59e0b', marginLeft: 'auto' }}>
+                Only works in built app
+              </span>
+            )}
+          </div>
+
+          {/* Dev mode notice */}
+          {startup.isDev && (
+            <div style={{
+              marginTop: 10, padding: '8px 12px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              borderRadius: 7, fontSize: 11, color: '#f59e0b', lineHeight: 1.6
+            }}>
+              <strong>Dev mode:</strong> This toggle only takes effect in the packaged app (<code style={{ background: 'rgba(0,0,0,0.3)', padding: '0 4px', borderRadius: 3 }}>npm run build</code>).
+              In dev mode the Electron binary would be registered instead of BootStuff.exe.
+            </div>
+          )}
+        </Field>
+
+        {/* Start minimized */}
+        <Field label="Start minimized to tray" hint="When enabled, opening BootStuff won't show the settings window — it goes straight to the tray.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Toggle
+              value={settings.startMinimized}
+              onChange={v => setSettings(s => ({ ...s, startMinimized: v }))}
+            />
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {settings.startMinimized ? 'Enabled — starts silently in tray' : 'Disabled — settings window opens on launch'}
+            </span>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+            Pair this with "Launch at Windows startup" for a fully silent background launcher.
+          </p>
         </Field>
       </Section>
 
+      {/* About */}
       <Section title="About">
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <span style={{ fontSize: 20 }}>⚡</span>
             <div>
               <p style={{ fontFamily: 'Space Mono', fontWeight: 700, fontSize: 13 }}>BootStuff</p>
-              <p style={{ fontSize: 11, color: 'var(--muted)' }}>v1.1.0 — Open Source (MIT)</p>
+              <p style={{ fontSize: 11, color: 'var(--muted)' }}>v1.2.0 — Open Source (MIT)</p>
             </div>
+            <a
+              href="https://github.com/Siddiqueath/bootstuff"
+              target="_blank"
+              rel="noreferrer"
+              style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}
+            >
+              GitHub ↗
+            </a>
           </div>
           <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
             Launch your entire work environment in one click. Define profiles with apps, browser tabs, terminal commands, volume and startup sounds.
