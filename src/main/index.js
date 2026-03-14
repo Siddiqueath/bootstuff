@@ -52,8 +52,20 @@ function createSettingsWindow() {
     title: 'BootStuff'
   });
   const isDev = process.env.NODE_ENV === 'development';
-  if (isDev) { settingsWindow.loadURL('http://localhost:5173'); }
-  else { settingsWindow.loadFile(path.join(__dirname, '../../renderer/dist/index.html')); }
+  if (isDev) {
+    settingsWindow.loadURL('http://localhost:5173');
+  } else {
+    // In packaged app: __dirname = .../resources/app/src/main
+    // renderer dist is at: .../resources/app/src/renderer/dist/index.html
+    const rendererPath = path.join(__dirname, '..', 'renderer', 'dist', 'index.html');
+    settingsWindow.loadFile(rendererPath).catch(err => {
+      // Fallback: try alternate path (for different packaging layouts)
+      const altPath = path.join(process.resourcesPath, 'app', 'src', 'renderer', 'dist', 'index.html');
+      settingsWindow.loadFile(altPath).catch(() => {
+        settingsWindow.loadURL(`file://${rendererPath}`);
+      });
+    });
+  }
   if (startMinimized) settingsWindow.once('ready-to-show', () => settingsWindow && settingsWindow.hide());
   settingsWindow.on('closed', () => { settingsWindow = null; });
 }
