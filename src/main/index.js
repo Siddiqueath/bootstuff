@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, globalShortcut } = require('electron');
+const { execSync } = require('child_process');
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -262,6 +263,21 @@ function buildTrayMenu() {
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
+// ── Single instance lock ─────────────────────────────────────────────────────
+// If another instance tries to launch, focus/open the existing window instead
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    createSettingsWindow();
+    if (settingsWindow) {
+      if (settingsWindow.isMinimized()) settingsWindow.restore();
+      settingsWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
   app.setAppUserModelId('com.bootstuff.app');
   migrateProfiles();
@@ -334,11 +350,16 @@ app.whenReady().then(() => {
   // u2500u2500 Windows startup (HKCU Run registry via Electron API) u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
   ipcMain.handle('get-startup-enabled', () => {
     const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) return { enabled: false, isDev: true };
     try {
-      const { openAtLogin } = app.getLoginItemSettings();
-      return { enabled: openAtLogin, isDev };
-    } catch (e) {
-      return { enabled: false, isDev };
+      // Use registry directly — works for both portable and installed apps
+      const result = execSync(
+        'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v BootStuff',
+        { encoding: 'utf8', windowsHide: true }
+      );
+      return { enabled: result.includes('BootStuff'), isDev: false };
+    } catch {
+      return { enabled: false, isDev: false };
     }
   });
 
@@ -346,15 +367,21 @@ app.whenReady().then(() => {
     const isDev = process.env.NODE_ENV === 'development';
     if (isDev) return { ok: false, isDev: true };
     try {
-      app.setLoginItemSettings({
-        openAtLogin: enable,
-        openAsHidden: true,
-        name: 'BootStuff',
-        path: app.getPath('exe')
-      });
-      // Verify it actually took effect
-      const { openAtLogin } = app.getLoginItemSettings();
-      return { ok: true, enabled: openAtLogin };
+      const exePath = app.getPath('exe');
+      if (enable) {
+        // Add to registry — /f overwrites if already exists
+        execSync(
+          `reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v BootStuff /t REG_SZ /d "\"${exePath}\"" /f`,
+          { encoding: 'utf8', windowsHide: true }
+        );
+      } else {
+        // Remove from registry
+        execSync(
+          'reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v BootStuff /f',
+          { encoding: 'utf8', windowsHide: true }
+        );
+      }
+      return { ok: true, enabled: enable };
     } catch (e) {
       return { ok: false, error: e.message };
     }
