@@ -84,7 +84,10 @@ async function launchProfile(profileId) {
   for (const appItem of profile.apps || []) {
     if (appItem.path) {
       try {
-        spawn(appItem.path, appItem.args ? parseArgs(appItem.args) : [], { detached: true, stdio: 'ignore' }).unref();
+        // Use exec + shell so Windows handles quoting correctly (fixes VS Code folder paths)
+        const args = appItem.args ? appItem.args.trim() : '';
+        const cmd = args ? `"${appItem.path}" ${args}` : `"${appItem.path}"`;
+        exec(cmd, { detached: true });
         appendLog(profileId, 'ok', `Launched ${path.basename(appItem.path)}`);
       } catch (e) {
         appendLog(profileId, 'error', `Failed: ${appItem.path} — ${e.message}`);
