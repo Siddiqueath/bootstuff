@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, globalShortcut } = require('electron');
 const { execSync } = require('child_process');
+const platform = require('./platform');
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -80,16 +81,15 @@ async function launchProfile(profileId) {
   appendLog(profileId, 'start', `Launching "${profile.name}"…`);
 
   if (profile.volume !== undefined) {
-    const vol = Math.round((profile.volume / 100) * 65535);
-    exec(`nircmd setsysvolume ${vol}`, (err) => {
+    const cmd = platform.setVolume(profile.volume);
+    exec(cmd, (err) => {
       if (err) appendLog(profileId, 'warn', `Volume error: ${err.message}`);
       else appendLog(profileId, 'ok', `Volume set to ${profile.volume}%`);
     });
   }
 
   if (profile.sound) {
-    // -WindowStyle Hidden prevents the PowerShell console window from appearing
-    exec(`powershell -NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName presentationCore; $p = New-Object System.Windows.Media.MediaPlayer; $p.Open([uri]'${profile.sound}'); $p.Volume = 0.9; $p.Play(); Start-Sleep -Seconds 300; $p.Close()"`);
+    exec(platform.playSoundCommand(profile.sound));
     appendLog(profileId, 'ok', `Playing ${path.basename(profile.sound)}`);
   }
 
@@ -98,9 +98,8 @@ async function launchProfile(profileId) {
   for (const appItem of profile.apps || []) {
     if (appItem.path) {
       try {
-        // `start /max` opens the window maximized; title arg ("") is required by start
         const args = appItem.args ? appItem.args.trim() : '';
-        const cmd = `start /max "" "${appItem.path}"${args ? ' ' + args : ''}`;
+        const cmd = platform.launchAppCommand(appItem.path, args);
         exec(cmd);
         appendLog(profileId, 'ok', `Launched ${path.basename(appItem.path)}`);
       } catch (e) {
@@ -110,7 +109,7 @@ async function launchProfile(profileId) {
     }
   }
 
-  const chromePath = store.get('settings.chromePath') || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+  const chromePath = store.get('settings.chromePath') || platform.defaultChromePath();
 
   // URL Groups: multiple tabs in one Chrome window
   for (const group of profile.urlGroups || []) {
@@ -131,7 +130,8 @@ async function launchProfile(profileId) {
   for (const cmd of profile.commands || []) {
     if (cmd.path && cmd.command) {
       try {
-        spawn('cmd.exe', ['/k', `cd /d "${cmd.path}" && ${cmd.command}`], { detached: true, stdio: 'ignore' }).unref();
+        const { exe, args: tArgs } = platform.terminalCommand(cmd.path, cmd.command);
+        spawn(exe, tArgs, { detached: true, stdio: 'ignore' }).unref();
         appendLog(profileId, 'ok', `${cmd.command} in ${path.basename(cmd.path)}`);
       } catch (e) {
         appendLog(profileId, 'error', `Command failed: ${e.message}`);
@@ -323,6 +323,7 @@ app.whenReady().then(() => {
   ipcMain.handle('get-settings', () => store.get('settings') || {});
   ipcMain.handle('save-settings', (_, settings) => { store.set('settings', settings); return true; });
   ipcMain.handle('get-launch-log', () => launchLog);
+  ipcMain.handle('get-ui-hints', () => platform.uiHints());
 
   ipcMain.handle('check-shortcut', (_, accelerator) => {
     if (!accelerator) return { valid: false, taken: false };
@@ -352,12 +353,8 @@ app.whenReady().then(() => {
     const isDev = process.env.NODE_ENV === 'development';
     if (isDev) return { enabled: false, isDev: true };
     try {
-      // Use registry directly — works for both portable and installed apps
-      const result = execSync(
-        'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v BootStuff',
-        { encoding: 'utf8', windowsHide: true }
-      );
-      return { enabled: result.includes('BootStuff'), isDev: false };
+      const enabled = platform.getStartupEnabled(app.getPath('exe'));
+      return { enabled, isDev: false };
     } catch {
       return { enabled: false, isDev: false };
     }
@@ -367,20 +364,7 @@ app.whenReady().then(() => {
     const isDev = process.env.NODE_ENV === 'development';
     if (isDev) return { ok: false, isDev: true };
     try {
-      const exePath = app.getPath('exe');
-      if (enable) {
-        // Add to registry — /f overwrites if already exists
-        execSync(
-          `reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v BootStuff /t REG_SZ /d "\"${exePath}\"" /f`,
-          { encoding: 'utf8', windowsHide: true }
-        );
-      } else {
-        // Remove from registry
-        execSync(
-          'reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v BootStuff /f',
-          { encoding: 'utf8', windowsHide: true }
-        );
-      }
+      platform.setStartupEnabled(enable, app.getPath('exe'));
       return { ok: true, enabled: enable };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -388,15 +372,19 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('import-bat-file', async () => {
+    const hints = platform.uiHints();
     const result = await dialog.showOpenDialog(settingsWindow, {
-      title: 'Import .bat startup file',
-      filters: [{ name: 'Batch Files', extensions: ['bat', 'cmd'] }],
+      title: platform.isWindows ? 'Import .bat startup file' : 'Import shell startup script',
+      filters: hints.importFileTypes,
       properties: ['openFile']
     });
     if (result.canceled || !result.filePaths.length) return null;
     const filePath = result.filePaths[0];
-    const content = fs.readFileSync(filePath, 'utf8');
-    return parseBatFile(content, path.basename(filePath, path.extname(filePath)));
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const fileName = path.basename(filePath, path.extname(filePath));
+    // Use appropriate parser for the platform
+    if (platform.isWindows) return parseBatFile(fileContent, fileName);
+    return platform.parseShellFile(fileContent, fileName);
   });
 
   ipcMain.handle('scan-tasks-json', async (_, folderPath) => {

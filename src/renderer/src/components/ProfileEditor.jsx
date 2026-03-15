@@ -39,7 +39,7 @@ const Label = ({ children }) => (
 
 const CHROME_PROFILES = ['Default', 'Profile 1', 'Profile 2', 'Profile 3', 'Profile 4', 'Profile 5'];
 
-export default function ProfileEditor({ profile, onChange }) {
+export default function ProfileEditor({ profile, onChange, hints = {} }) {
   const update = (field, value) => onChange({ ...profile, [field]: value });
 
   // Apps
@@ -137,7 +137,7 @@ export default function ProfileEditor({ profile, onChange }) {
         <div style={{ marginBottom: 12 }}>
           <Label>Startup Sound (MP3 path)</Label>
           <input value={profile.sound} onChange={e => update('sound', e.target.value)}
-            placeholder="D:\Music\startup.mp3" className="mono" style={{ fontSize: 12 }} />
+            placeholder={hints.soundPlaceholder || "D:\\Music\\startup.mp3"} className="mono" style={{ fontSize: 12 }} />
         </div>
         <div>
           <Label>System Volume — {profile.volume}%</Label>
@@ -155,7 +155,7 @@ export default function ProfileEditor({ profile, onChange }) {
               <div style={{ flex: 1 }}>
                 <Label>Executable Path</Label>
                 <input value={app.path} onChange={e => updateApp(i, 'path', e.target.value)}
-                  placeholder="C:\Path\To\App.exe" className="mono" style={{ fontSize: 11 }} />
+                  placeholder={hints.appPlaceholder || "C:\\Path\\To\\App.exe"} className="mono" style={{ fontSize: 11 }} />
               </div>
               <IconBtn onClick={() => removeApp(i)} danger title="Remove">✕</IconBtn>
             </div>
@@ -239,7 +239,7 @@ export default function ProfileEditor({ profile, onChange }) {
               <div style={{ flex: 1 }}>
                 <Label>Working Directory</Label>
                 <input value={cmd.path} onChange={e => updateCmd(i, 'path', e.target.value)}
-                  placeholder="D:\Project\folder" className="mono" style={{ fontSize: 11 }} />
+                  placeholder={hints.folderPlaceholder || "D:\\Project\\folder"} className="mono" style={{ fontSize: 11 }} />
               </div>
               <IconBtn onClick={() => removeCmd(i)} danger title="Remove">✕</IconBtn>
             </div>

@@ -8,6 +8,7 @@ import ConfirmModal from './components/ConfirmModal';
 
 export default function App() {
   const [profiles, setProfiles] = useState([]);
+  const [hints, setHints] = useState({});
   const [activeProfileId, setActiveProfileId] = useState(null);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -21,6 +22,7 @@ export default function App() {
       if (p.length > 0) setActiveProfileId(p[0].id);
     });
     window.bootstuff?.getLaunchLog().then(log => setLogEntries(log || []));
+    window.bootstuff?.getUiHints?.().then(h => { if (h) setHints(h); }).catch(() => {});
     window.bootstuff?.onLaunchLogEntry?.((entry) => {
       setLogEntries(prev => [...prev, entry]);
     });
@@ -136,6 +138,7 @@ export default function App() {
         onViewChange={setView}
         onImportBat={importBat}
         logErrorCount={logEntries.filter(e => e.type === 'error').length}
+        hints={hints}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -157,7 +160,7 @@ export default function App() {
           {view === 'settings' && <SettingsPanel />}
           {view === 'editor' && (
             activeProfile
-              ? <ProfileEditor key={activeProfile.id} profile={activeProfile} onChange={updateProfile} />
+              ? <ProfileEditor key={activeProfile.id} profile={activeProfile} onChange={updateProfile} hints={hints} />
               : <EmptyState onAdd={addProfile} onImport={importBat} />
           )}
         </main>

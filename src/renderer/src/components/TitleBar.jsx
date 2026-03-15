@@ -1,4 +1,4 @@
-export default function TitleBar({ saved, dirty, onSave, view, onViewChange, onImportBat, logErrorCount }) {
+export default function TitleBar({ saved, dirty, onSave, view, onViewChange, onImportBat, logErrorCount, hints = {} }) {
   const logCount = logErrorCount;
   const NavBtn = ({ id, label }) => (
     <button
@@ -49,7 +49,7 @@ export default function TitleBar({ saved, dirty, onSave, view, onViewChange, onI
           background: 'transparent', border: '1px solid var(--border)',
           color: 'var(--muted)', borderRadius: 6, padding: '4px 10px',
           fontSize: 11, cursor: 'pointer', fontFamily: 'DM Sans', transition: 'all 0.15s', whiteSpace: 'nowrap'
-        }}>⬆ Import .bat</button>
+        }}>{hints.importLabel || '⬆ Import .bat'}</button>
 
         <button onClick={onSave} style={{
           background: saved ? 'var(--success)' : 'var(--accent)',

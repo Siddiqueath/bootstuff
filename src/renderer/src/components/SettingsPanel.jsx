@@ -32,10 +32,13 @@ export default function SettingsPanel() {
   const [startup, setStartup] = useState({ enabled: false, isDev: false, loading: true });
   const [startupStatus, setStartupStatus] = useState(null); // 'ok' | 'dev-warn' | null
 
+  const [hints, setHints] = useState({});
+
   useEffect(() => {
     window.bootstuff?.getSettings().then(s => {
       if (s) setSettings(prev => ({ ...prev, ...s }));
     });
+    window.bootstuff?.getUiHints?.().then(h => { if (h) setHints(h); }).catch(() => {});
     // Guard: if IPC call fails or method doesn't exist, still clear loading
     const startupCall = window.bootstuff?.getStartupEnabled?.();
     if (!startupCall) {
@@ -98,18 +101,20 @@ export default function SettingsPanel() {
           <input
             value={settings.chromePath}
             onChange={e => setSettings(s => ({ ...s, chromePath: e.target.value }))}
-            placeholder="C:\Program Files\Google\Chrome\Application\chrome.exe"
+            placeholder={hints.chromePlaceholder || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"}
             className="mono" style={{ fontSize: 11 }}
           />
         </Field>
-        <Field label="NirCmd Path" hint="Path to nircmd.exe for volume control. Place in System32 or specify here.">
-          <input
-            value={settings.nircmdPath || ''}
-            onChange={e => setSettings(s => ({ ...s, nircmdPath: e.target.value }))}
-            placeholder="C:\Windows\System32\nircmd.exe"
-            className="mono" style={{ fontSize: 11 }}
-          />
-        </Field>
+        {hints.nircmdVisible !== false && (
+          <Field label="NirCmd Path" hint="Path to nircmd.exe for volume control. Place in System32 or specify here.">
+            <input
+              value={settings.nircmdPath || ''}
+              onChange={e => setSettings(s => ({ ...s, nircmdPath: e.target.value }))}
+              placeholder="C:\Windows\System32\nircmd.exe"
+              className="mono" style={{ fontSize: 11 }}
+            />
+          </Field>
+        )}
       </Section>
 
       {/* Startup & Behavior */}
