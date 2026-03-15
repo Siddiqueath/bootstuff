@@ -2,7 +2,7 @@
 
 > Launch your entire work environment in one click.
 
-BootStuff is an open source Windows system tray app built with Electron + React. Define workspace **profiles** — apps, browser tabs, terminal commands, volume, startup sound — and launch everything instantly from the tray or the settings UI.
+BootStuff is an open source **cross-platform** system tray app built with Electron + React. Define workspace **profiles** — apps, browser tabs, terminal commands, volume, startup sound — and launch everything instantly from the tray or a global keyboard shortcut.
 
 ---
 
@@ -12,14 +12,31 @@ BootStuff is an open source Windows system tray app built with Electron + React.
 - 💼 **Multiple profiles** — Work, Personal, Gaming, anything
 - 🌐 **Chrome window groups** — open multiple tabs in one Chrome window, per Chrome profile
 - 💻 **Terminal commands** — auto-run `npm run dev`, `yarn start`, etc. in project folders
-- 📋 **tasks.json import** — scan a VS Code workspace and import `runOn: folderOpen` tasks automatically
-- 🔊 **Volume control** — set system volume per profile (requires NirCmd)
-- 🎵 **Startup sound** — play a custom MP3 when launching
-- ⬆️ **Import .bat** — parse an existing startup `.bat` file into a profile instantly
+- 📋 **tasks.json import** — scan a VS Code workspace and import `runOn: folderOpen` tasks
+- 🔊 **Volume control** — set system volume per profile
+- 🎵 **Startup sound** — play a custom MP3/audio file when launching
+- ⬆️ **Import startup script** — parse an existing `.bat` (Windows) or `.sh` (Mac/Linux) into a profile
+- ⌨️ **Global keyboard shortcuts** — launch any profile from anywhere without opening the app
 - 🔀 **Drag-to-reorder** — rearrange profiles in the sidebar
-- ⧉ **Duplicate** — clone a profile as a starting point
+- ⧉ **Duplicate profiles** — clone a profile as a starting point
 - 📝 **Launch log** — live feed of every action taken during a launch, with error badges
+- 🚀 **Launch at startup** — start BootStuff automatically when you log in
+- 🔇 **Start minimized** — boots silently to tray, no window shown
+- 🔔 **Toast notifications** — Windows notification when a launch completes
 - 💾 **Local storage** — all data stored locally via `electron-store`, no cloud required
+- 🌍 **Cross-platform** — Windows, macOS, Linux
+
+---
+
+## 📥 Download
+
+Grab the latest release for your OS from the [Releases page](https://github.com/Siddiqueath/bootstuff/releases/latest):
+
+| OS | File | Notes |
+|---|---|---|
+| Windows | `BootStuff x.x.x.exe` | Portable — no install needed |
+| macOS | `BootStuff-x.x.x.dmg` | Drag to Applications |
+| Linux | `BootStuff-x.x.x.AppImage` | `chmod +x` then run |
 
 ---
 
@@ -28,33 +45,45 @@ BootStuff is an open source Windows system tray app built with Electron + React.
 ### Prerequisites
 
 - **Node.js 18+**
-- **Windows 10/11**
-- **[NirCmd](https://www.nirsoft.net/utils/nircmd.html)** — for volume control. Place `nircmd.exe` in `C:\Windows\System32\` or set the path in Settings.
+- **Windows**: [NirCmd](https://www.nirsoft.net/utils/nircmd.html) for volume control (place in `C:\Windows\System32\`)
+- **macOS**: Volume control uses `osascript` (built-in)
+- **Linux**: Volume control uses `pactl` (PulseAudio/PipeWire)
 
-### Install & Run
+### Install & Run (Development)
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/bootstuff.git
+git clone https://github.com/Siddiqueath/bootstuff.git
 cd bootstuff
 
-# Install root dependencies
 npm install
-
-# Install renderer dependencies
 cd src/renderer && npm install && cd ../..
 
-# Start in development mode
 npm start
 ```
 
-### Build for Windows
+### Build
 
 ```bash
-npm run build
+# Windows portable
+npm run build:portable
+
+# macOS DMG
+npm run build:mac
+
+# Linux AppImage
+npm run build:linux
+
+# All platforms (via GitHub Actions — recommended)
+git tag v1.x.x && git push origin v1.x.x
 ```
 
-This builds the React renderer first, then packages with `electron-builder` into an NSIS installer at `dist/`.
+### Deploy locally (Windows)
+
+```powershell
+npm run deploy
+```
+
+Builds and copies to `%LOCALAPPDATA%\BootStuff\BootStuff.exe` automatically.
 
 ---
 
@@ -62,28 +91,29 @@ This builds the React renderer first, then packages with `electron-builder` into
 
 ```
 bootstuff/
+├── .github/workflows/
+│   └── build.yml           ← CI: auto-builds Win/Mac/Linux on tag push
 ├── assets/
-│   ├── icon.png          ← 256×256 app icon
-│   ├── icon_16.png       ← 16×16 tray icon
-│   ├── icon_32.png       ← 32×32 tray icon
-│   └── icon.ico          ← Windows ICO for installer (add manually)
+│   ├── icon.png            ← 512×512 app icon
+│   ├── icon_16.png         ← 16×16 tray icon
+│   └── icon.ico            ← Windows ICO for installer
 ├── src/
 │   ├── main/
-│   │   ├── index.js      ← Electron main: tray, IPC, launcher, .bat parser, tasks.json scanner
-│   │   └── preload.js    ← Context bridge (IPC API exposed to renderer)
+│   │   ├── index.js        ← Electron main: tray, IPC, launcher
+│   │   ├── platform.js     ← OS abstraction (Windows/Mac/Linux)
+│   │   └── preload.js      ← Context bridge
 │   └── renderer/
-│       ├── src/
-│       │   ├── App.jsx
-│       │   ├── index.css
-│       │   └── components/
-│       │       ├── TitleBar.jsx      ← Nav + save + import .bat
-│       │       ├── Sidebar.jsx       ← Profile list, drag-reorder, duplicate
-│       │       ├── ProfileEditor.jsx ← Full profile editor
-│       │       ├── LaunchLog.jsx     ← Live launch activity feed
-│       │       ├── SettingsPanel.jsx ← App settings
-│       │       └── ConfirmModal.jsx  ← Delete confirmation
-│       ├── index.html
-│       └── vite.config.js
+│       └── src/
+│           ├── App.jsx
+│           └── components/
+│               ├── TitleBar.jsx
+│               ├── Sidebar.jsx
+│               ├── ProfileEditor.jsx
+│               ├── ShortcutRecorder.jsx
+│               ├── LaunchLog.jsx
+│               ├── SettingsPanel.jsx
+│               └── ConfirmModal.jsx
+├── deploy.ps1              ← Windows one-command deploy script
 └── package.json
 ```
 
@@ -98,6 +128,7 @@ bootstuff/
   "icon": "💼",
   "volume": 75,
   "sound": "D:\\Music\\startup.mp3",
+  "shortcut": "CommandOrControl+Shift+W",
   "apps": [
     { "path": "C:\\...\\Code.exe", "args": "D:\\Project --new-window", "delay": 1500 }
   ],
@@ -111,25 +142,6 @@ bootstuff/
     { "path": "D:\\Project\\UI", "command": "yarn start" }
   ]
 }
-```
-
----
-
-## ⚙️ VS Code tasks.json Integration
-
-BootStuff can import `runOn: folderOpen` tasks from `.vscode/tasks.json`. In the Profile Editor, click **⬆ Import tasks.json** and select your workspace folder.
-
-> **Note:** For tasks to actually auto-run when VS Code opens the folder, you need `task.allowAutomaticTasks: on` in your VS Code user settings.
-
----
-
-## 📦 Building an .ico icon
-
-The installer requires `assets/icon.ico`. Generate one from `icon.png` using:
-
-```bash
-# Using ImageMagick
-magick assets/icon.png -define icon:auto-resize=256,64,48,32,16 assets/icon.ico
 ```
 
 ---
