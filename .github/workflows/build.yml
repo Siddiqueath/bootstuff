@@ -3,12 +3,13 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'           # triggers on v1.2.0, v2.0.0, etc.
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -34,29 +35,43 @@ jobs:
           cache: 'npm'
 
       - name: Install root dependencies
-        run: npm install
+        run: npm ci --prefer-offline
+        env:
+          CI: true
+          npm_config_yes: true
 
       - name: Install renderer dependencies
-        run: cd src/renderer && npm install
+        run: cd src/renderer && npm ci --prefer-offline
+        env:
+          CI: true
 
       - name: Build renderer
         run: npm run build:renderer
+        env:
+          CI: true
 
       - name: Build Electron app (Windows)
         if: matrix.platform == 'win'
         run: npx electron-builder --win portable
         env:
+          CI: true
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Electron app (Mac)
         if: matrix.platform == 'mac'
         run: npx electron-builder --mac
         env:
+          CI: true
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Electron app (Linux)
         if: matrix.platform == 'linux'
         run: npx electron-builder --linux
+        env:
+          CI: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -75,9 +90,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Display structure
-        run: find artifacts -type f
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
