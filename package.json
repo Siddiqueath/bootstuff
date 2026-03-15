@@ -1,6 +1,6 @@
 {
   "name": "bootstuff",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Launch your entire work environment in one click",
   "main": "src/main/index.js",
   "scripts": {
