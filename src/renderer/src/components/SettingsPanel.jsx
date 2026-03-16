@@ -33,12 +33,19 @@ export default function SettingsPanel() {
   const [startupStatus, setStartupStatus] = useState(null); // 'ok' | 'dev-warn' | null
 
   const [hints, setHints] = useState({});
+  const [appVersion, setAppVersion] = useState('');
+  const [updateInfo, setUpdateInfo] = useState(null);   // { version, url } if update available
+  const [updateStatus, setUpdateStatus] = useState(null); // 'checking' | 'up-to-date' | null
 
   useEffect(() => {
     window.bootstuff?.getSettings().then(s => {
       if (s) setSettings(prev => ({ ...prev, ...s }));
     });
     window.bootstuff?.getUiHints?.().then(h => { if (h) setHints(h); }).catch(() => {});
+    window.bootstuff?.getAppVersion?.().then(v => { if (v) setAppVersion(v); });
+    window.bootstuff?.getUpdateInfo?.().then(info => { if (info) setUpdateInfo(info); });
+    window.bootstuff?.onUpdateAvailable?.((info) => { setUpdateInfo(info); setUpdateStatus(null); });
+    window.bootstuff?.onUpdateNotAvailable?.(() => setUpdateStatus('up-to-date'));
     // Guard: if IPC call fails or method doesn't exist, still clear loading
     const startupCall = window.bootstuff?.getStartupEnabled?.();
     if (!startupCall) {
@@ -184,11 +191,11 @@ export default function SettingsPanel() {
       {/* About */}
       <Section title="About">
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <span style={{ fontSize: 20 }}>⚡</span>
             <div>
               <p style={{ fontFamily: 'Space Mono', fontWeight: 700, fontSize: 13 }}>BootStuff</p>
-              <p style={{ fontSize: 11, color: 'var(--muted)' }}>v1.2.0 — Open Source (MIT)</p>
+              <p style={{ fontSize: 11, color: 'var(--muted)' }}>v{appVersion || '...'} — Open Source (MIT)</p>
             </div>
             <a
               href="https://github.com/Siddiqueath/bootstuff"
@@ -199,9 +206,61 @@ export default function SettingsPanel() {
               GitHub ↗
             </a>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+
+          {/* Update available banner */}
+          {updateInfo && (
+            <div style={{
+              padding: '10px 12px', marginBottom: 12,
+              background: 'rgba(124, 92, 252, 0.1)',
+              border: '1px solid rgba(124, 92, 252, 0.4)',
+              borderRadius: 7, display: 'flex', alignItems: 'center', gap: 10
+            }}>
+              <span style={{ fontSize: 16 }}>🆕</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
+                  v{updateInfo.version} is available
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--muted)' }}>You are on v{appVersion}</p>
+              </div>
+              <a
+                href={updateInfo.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: 'var(--accent)', color: '#fff', border: 'none',
+                  borderRadius: 6, padding: '5px 12px', fontSize: 11,
+                  fontWeight: 600, cursor: 'pointer', textDecoration: 'none',
+                  fontFamily: 'DM Sans'
+                }}
+              >
+                Download ↗
+              </a>
+            </div>
+          )}
+
+          <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 12 }}>
             Launch your entire work environment in one click. Define profiles with apps, browser tabs, terminal commands, volume and startup sounds.
           </p>
+
+          {/* Check for updates button */}
+          <button
+            onClick={async () => {
+              setUpdateStatus('checking');
+              await window.bootstuff?.checkForUpdates();
+              // Response comes via onUpdateAvailable or onUpdateNotAvailable events
+              setTimeout(() => setUpdateStatus(s => s === 'checking' ? 'up-to-date' : s), 5000);
+            }}
+            style={{
+              background: 'transparent', border: '1px solid var(--border)',
+              color: 'var(--muted)', borderRadius: 6, padding: '5px 12px',
+              fontSize: 11, cursor: 'pointer', fontFamily: 'DM Sans',
+              display: 'flex', alignItems: 'center', gap: 6
+            }}
+          >
+            {updateStatus === 'checking' ? '⏳ Checking…'
+              : updateStatus === 'up-to-date' ? "✓ You're up to date"
+              : '🔄 Check for Updates'}
+          </button>
         </div>
       </Section>
     </div>

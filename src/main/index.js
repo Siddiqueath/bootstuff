@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, globalShortcut } = require('electron');
 const { execSync } = require('child_process');
+const https = require('https');
 const platform = require('./platform');
 const { exec, spawn } = require('child_process');
 const path = require('path');
@@ -248,15 +249,82 @@ function migrateProfiles() {
   if (changed) store.set('profiles', migrated);
 }
 
+// ── Auto-update checker ──────────────────────────────────────────────────────
+let updateInfo = null; // { version, url } when update is available
+
+function checkForUpdates(silent = true) {
+  const currentVersion = app.getVersion();
+  const options = {
+    hostname: 'api.github.com',
+    path: '/repos/Siddiqueath/bootstuff/releases/latest',
+    headers: { 'User-Agent': 'BootStuff-App' }
+  };
+
+  https.get(options, (res) => {
+    let data = '';
+    res.on('data', chunk => data += chunk);
+    res.on('end', () => {
+      try {
+        const release = JSON.parse(data);
+        const latest = release.tag_name?.replace(/^v/, '');
+        if (!latest) return;
+
+        const isNewer = compareVersions(latest, currentVersion) > 0;
+        if (isNewer) {
+          updateInfo = { version: latest, url: release.html_url };
+          // Rebuild tray menu to show update item
+          tray?.setContextMenu(buildTrayMenu());
+          // Show notification
+          try {
+            const { Notification } = require('electron');
+            if (Notification.isSupported()) {
+              const n = new Notification({
+                title: 'BootStuff Update Available',
+                body: `v${latest} is available — click to download`,
+                silent: false
+              });
+              n.on('click', () => require('electron').shell.openExternal(updateInfo.url));
+              n.show();
+            }
+          } catch (_) {}
+          // Push to renderer if open
+          settingsWindow?.webContents.send('update-available', updateInfo);
+        } else if (!silent) {
+          settingsWindow?.webContents.send('update-not-available', { current: currentVersion });
+        }
+      } catch (e) {
+        console.warn('Update check failed:', e.message);
+      }
+    });
+  }).on('error', (e) => console.warn('Update check error:', e.message));
+}
+
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
+
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function buildTrayMenu() {
   const profiles = store.get('profiles') || [];
+  const updateItem = updateInfo ? [{
+    label: `🆕  Update available — v${updateInfo.version}`,
+    click: () => require('electron').shell.openExternal(updateInfo.url)
+  }, { type: 'separator' }] : [];
+
   return Menu.buildFromTemplate([
-    { label: 'BootStuff', enabled: false },
+    { label: `BootStuff v${app.getVersion()}`, enabled: false },
     { type: 'separator' },
+    ...updateItem,
     ...profiles.map(p => ({ label: `${p.icon}  Launch ${p.name}`, click: () => launchProfile(p.id) })),
     { type: 'separator' },
     { label: '⚙️  Settings', click: createSettingsWindow },
+    { label: '🔄  Check for Updates', click: () => checkForUpdates(false) },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]);
@@ -402,6 +470,17 @@ app.whenReady().then(() => {
     if (tasks.length === 0) return { error: 'tasks.json found but no tasks have runOn: folderOpen set.' };
     return tasks;
   });
+
+  // Check for updates 5s after launch (silent), then every 6 hours
+  setTimeout(() => checkForUpdates(true), 5000);
+  setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000);
+
+  ipcMain.handle('check-for-updates', () => {
+    checkForUpdates(false);
+    return { current: app.getVersion() };
+  });
+  ipcMain.handle('get-update-info', () => updateInfo);
+  ipcMain.handle('get-app-version', () => app.getVersion());
 
   ipcMain.on('close-window', () => settingsWindow?.close());
   ipcMain.on('minimize-window', () => settingsWindow?.minimize());
