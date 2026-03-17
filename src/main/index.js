@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, globalShortcut } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, globalShortcut, shell, Notification } = require('electron');
 const { execSync } = require('child_process');
 const https = require('https');
 const platform = require('./platform');
@@ -276,17 +276,28 @@ function checkForUpdates(silent = true) {
           tray?.setContextMenu(buildTrayMenu());
           // Show notification
           try {
-            const { Notification } = require('electron');
             if (Notification.isSupported()) {
+              const url = updateInfo.url; // capture in closure
               const n = new Notification({
-                title: 'BootStuff Update Available',
-                body: `v${latest} is available — click to download`,
+                title: '⚡ BootStuff Update Available',
+                body: `v${latest} is available — click to open download page`,
                 silent: false
               });
-              n.on('click', () => require('electron').shell.openExternal(updateInfo.url));
+              n.on('click', () => {
+                // Bring app to foreground first, then open browser
+                app.focus();
+                shell.openExternal(url).catch(e => console.warn('openExternal failed:', e.message));
+                // Also open settings window so user sees the update banner
+                createSettingsWindow();
+                settingsWindow?.webContents.send('update-available', { version: latest, url });
+              });
+              // Also handle Windows Action Center click
+              n.on('action', () => {
+                shell.openExternal(url).catch(() => {});
+              });
               n.show();
             }
-          } catch (_) {}
+          } catch (e) { console.warn('Notification error:', e.message); }
           // Push to renderer if open
           settingsWindow?.webContents.send('update-available', updateInfo);
         } else if (!silent) {
@@ -314,7 +325,7 @@ function buildTrayMenu() {
   const profiles = store.get('profiles') || [];
   const updateItem = updateInfo ? [{
     label: `🆕  Update available — v${updateInfo.version}`,
-    click: () => require('electron').shell.openExternal(updateInfo.url)
+    click: () => shell.openExternal(updateInfo.url).catch(() => {})
   }, { type: 'separator' }] : [];
 
   return Menu.buildFromTemplate([
@@ -378,7 +389,6 @@ app.whenReady().then(() => {
     tray.setToolTip('BootStuff — double-click to open settings');
     // Windows toast notification
     try {
-      const { Notification } = require('electron');
       if (Notification.isSupported()) {
         new Notification({
           title: 'BootStuff',
